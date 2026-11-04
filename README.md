@@ -81,8 +81,7 @@ dépendance externe.
 Piscine_Cybersecurity/
 └── days_0/
     ├── spider/
-    │   ├── spider.py      # programme principal
-    │   └── tester.py      # test manuel rapide de l'extraction
+    │   └── spider.py      # programme principal
     └── scorpion/          # exercice 2 (à venir)
 ```
 
@@ -468,26 +467,6 @@ chaque image, pour qu'une erreur isolée ne fasse pas tomber tout le programme.
 ---
 
 ## Tests
-
-### Test rapide de l'extraction
-
-```bash
-cd days_0/spider
-python3 tester.py
-```
-
-Sortie attendue :
-
-```python
-['a.png', '../img/b.JPG?x=1', 'https://cdn.example.com/c.gif', 'a.png', 'photo.jpeg#top']
-```
-
-Ce test vérifie :
-
-- les extensions valides ;
-- le rejet de `notes.txt` et `lazy.webp` ;
-- la conservation des URLs relatives ;
-- la conservation des doublons à ce stade (ils sont éliminés au téléchargement).
 
 ### Test de bout en bout avec un serveur local
 
