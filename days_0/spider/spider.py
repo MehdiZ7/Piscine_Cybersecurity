@@ -1,0 +1,291 @@
+import argparse
+import hashlib
+import posixpath
+from collections import deque
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urldefrag, urljoin, urlsplit
+from urllib.request import Request, urlopen
+
+
+VALID_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".bmp")
+
+
+class ImageParser(HTMLParser):
+    """Collect the image URLs found in an HTML document.
+
+    Feed HTML to an instance with feed(); the extracted URLs are then
+    available in the images attribute.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the parser with an empty image list."""
+        super().__init__()
+        self.images: list[str] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        """Record the src attribute of every img tag.
+
+        Called by HTMLParser.feed() for each opening tag. Tags other
+        than <img> are ignored, as are <img> tags without a non-empty
+        src attribute.
+        """
+        if tag != "img":
+            return
+        attributes = dict(attrs)
+        src = attributes.get("src")
+        if src:
+            self.images.append(src)
+
+
+class LinkParser(HTMLParser):
+    """Collect the hyperlinks found in an HTML document.
+
+    Feed HTML to an instance with feed(); the extracted href values are
+    then available in the links attribute.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the parser with an empty link list."""
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        """Record the href attribute of every a tag.
+
+        Called by HTMLParser.feed() for each opening tag. Tags other
+        than <a> are ignored, as are links without a non-empty href.
+        """
+        if tag != "a":
+            return
+        attributes = dict(attrs)
+        href = attributes.get("href")
+        if href:
+            self.links.append(href)
+
+
+def normalize_url(url: str) -> str:
+    """Percent-encode non-ASCII characters so the URL is HTTP-safe.
+
+    Reserved characters and existing percent escapes are preserved, so
+    applying this function twice is harmless.
+    """
+    return quote(url, safe=":/?#[]@!$&'()*+,;=%")
+
+
+def is_image_url(url: str) -> bool:
+    """Return True if the URL path ends with a supported extension.
+
+    The query string and fragment are ignored, and the comparison is
+    case-insensitive, so links like "photo.JPG?size=big" are accepted.
+    """
+    path = urlsplit(url).path.lower()
+    return path.endswith(VALID_EXTENSIONS)
+
+
+def extract_images(html: str) -> list[str]:
+    """Return the supported image URLs found in an HTML document.
+
+    Parse the given HTML with ImageParser, then keep only the URLs whose
+    path ends with a supported image extension.
+    """
+    parser = ImageParser()
+    parser.feed(html)
+    parser.close()
+    return [url for url in parser.images if is_image_url(url)]
+
+
+def extract_links(html: str) -> list[str]:
+    """Return the raw hyperlinks found in an HTML document.
+
+    The links are returned exactly as written in the HTML: they may be
+    relative, absolute, or use any scheme. Resolution is left to the
+    caller.
+    """
+    parser = LinkParser()
+    parser.feed(html)
+    parser.close()
+    return parser.links
+
+
+def same_site(base_url: str, url: str) -> bool:
+    """Return True if url is http(s) and on the same host as base_url.
+
+    Both arguments are expected to be absolute URLs. The host comparison
+    is case-insensitive.
+    """
+    base = urlsplit(base_url)
+    target = urlsplit(url)
+    return (
+        target.scheme in ("http", "https")
+        and target.netloc.lower() == base.netloc.lower()
+    )
+
+
+def crawl_page(start_url: str, max_depth: int, out: Path) -> list[str]:
+    """Crawl same-site pages from start_url and download their images.
+
+    Pages are visited breadth-first, up to max_depth levels of links.
+    Each image is downloaded once per absolute URL. Fetch and download
+    errors are reported and skipped. Return the successfully fetched
+    page URLs in visit order.
+    """
+    start_url = normalize_url(urldefrag(start_url)[0])
+    queue = deque([(start_url, 0)])
+    visited: set[str] = set()
+    pages: list[str] = []
+    seen_images: set[str] = set()
+
+    while queue:
+        url, depth = queue.popleft()
+
+        if url in visited:
+            continue
+        visited.add(url)
+
+        try:
+            html = fetch(url)
+        except HTTPError as e:
+            print(f"[SKIP] {url} -> HTTP {e.code}")
+            continue
+        except URLError as e:
+            print(f"[SKIP] {url} -> {e.reason}")
+            continue
+
+        pages.append(url)
+        print(f"[PAGE] {url} (depth={depth})")
+
+        for src in extract_images(html):
+            img_url = normalize_url(urljoin(url, src))
+            if img_url in seen_images:
+                continue
+            seen_images.add(img_url)
+
+            try:
+                target = download_image(img_url, out)
+                print(f"[OK] {img_url} -> {target}")
+            except HTTPError as e:
+                print(f"[FAIL] {img_url} -> HTTP {e.code}")
+            except URLError as e:
+                print(f"[FAIL] {img_url} -> {e.reason}")
+
+        if depth >= max_depth:
+            continue
+
+        for href in extract_links(html):
+            link = normalize_url(urljoin(url, href))
+            link, _ = urldefrag(link)
+            if (
+                same_site(start_url, link)
+                and not is_image_url(link)
+                and link not in visited
+            ):
+                queue.append((link, depth + 1))
+
+    return pages
+
+
+def parse_arg() -> argparse.Namespace:
+    """Parse the spider command-line arguments.
+
+    Reads the starting URL (positional) and the optional flags:
+    -r (recursive download), -l N (maximum depth, default 5) and
+    -p PATH (output directory, default ./data/).
+
+    Exits with code 2 if the depth is negative.
+
+    Returns:
+        argparse.Namespace: the parsed url, recursive, depth and path.
+    """
+    parser = argparse.ArgumentParser(
+        prog="spider",
+        description="Extract images from a website."
+    )
+
+    parser.add_argument("url", help="starting URL")
+    parser.add_argument("-r", dest="recursive", action="store_true",
+                        help="download images recursively")
+    parser.add_argument("-l", dest="depth", type=int, default=5, metavar="N",
+                        help="maximum recursion depth (default: 5)")
+    parser.add_argument("-p", dest="path", default="./data/", metavar="PATH",
+                        help="output directory (default: ./data/)")
+    args = parser.parse_args()
+    if args.depth < 0:
+        parser.error("-l must be >= 0")
+    return args
+
+
+def fetch(url: str) -> str:
+    """Fetch a URL and return its body decoded as text.
+
+    Sends a GET request with a custom User-Agent and a timeout, then
+    decodes the response body in UTF-8 (invalid bytes are replaced).
+    Network and HTTP errors propagate to the caller.
+    """
+    req = Request(url, headers={"User-Agent": "Spider42/1.0"})
+    with urlopen(req, timeout=10) as resp:
+        html = resp.read().decode("utf-8", errors="replace")
+        print(resp.status, resp.headers.get("Content-Type"))
+    return html
+
+
+def filename_from_url(url: str) -> str | None:
+    """Return a collision-free local filename derived from a URL.
+
+    The basename comes from the URL path, while a short hash of the full
+    URL is appended to keep different URLs with the same basename apart.
+    Return None when the path has no basename (for example a directory
+    URL ending with a slash).
+    """
+    path = urlsplit(url).path
+    name = posixpath.basename(path)
+    if not name:
+        return None
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
+    stem, suffix = posixpath.splitext(name)
+    return f"{stem}_{digest}{suffix}"
+
+
+def download_image(url: str, directory: Path) -> Path | None:
+    """Download an image and write it into directory.
+
+    The bytes are stored as-is, without any text decoding. Return the
+    written path, or None when no filename can be derived from the URL.
+    HTTPError and URLError propagate to the caller.
+    """
+    name = filename_from_url(url)
+    if name is None:
+        return None
+    req = Request(url, headers={"User-Agent": "Spider42/1.0"})
+    with urlopen(req, timeout=10) as resp:
+        img = resp.read()
+        target = directory / name
+        target.write_bytes(img)
+    return target
+
+
+def main() -> None:
+    """Run the spider from the command line.
+
+    Parses the URL and options, creates the output directory, then
+    crawls the site. Without -r, only the starting page is processed;
+    with -r, same-site links are followed up to the -l depth. Prints a
+    final page count.
+    """
+    args = parse_arg()
+
+    out = Path(args.path)
+    out.mkdir(parents=True, exist_ok=True)
+    max_depth = args.depth if args.recursive else 0
+    pages = crawl_page(args.url, max_depth, out)
+
+    print(f"{len(pages)} page(s) visited")
+
+
+if __name__ == "__main__":
+    main()

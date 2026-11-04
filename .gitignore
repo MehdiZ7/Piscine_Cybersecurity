@@ -1,0 +1,13 @@
+# Sujet de la piscine (non redistribué)
+days_0/en.subject.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Sorties téléchargées et fichiers de test
+days_0/spider/data/
+data/
+*.log
