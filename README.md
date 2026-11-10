@@ -2,15 +2,16 @@
 
 Projet d'introduction au **web scraping** et aux **métadonnées**.
 
-Ce dépôt contient le premier exercice de la piscine cybersécurité : **Spider**, un
-programme capable de parcourir un site, d'en extraire les images et de les
-télécharger, avec récursion optionnelle et gestion de la profondeur. Le second
-exercice, **Scorpion** (analyse EXIF), est prévu dans `days_0/scorpion/` et n'est
-pas encore implémenté.
+Ce dépôt contient les deux exercices du Day 0 :
 
-L'objectif de ce README est double : expliquer **ce que fait le programme** et
-détailler **comment il est construit**, fonction par fonction, pour rendre le
-travail lisible et vérifiable.
+1. **Spider** : parcourir un site, extraire les images et les télécharger,
+   avec récursion optionnelle et limite de profondeur ;
+2. **Scorpion** : lire et afficher les métadonnées EXIF et les informations
+   techniques d'un ou plusieurs fichiers images.
+
+L'objectif de ce README est double : expliquer **ce que font les programmes**
+et détailler **comment ils sont construits**, fonction par fonction, pour rendre
+le travail lisible et vérifiable.
 
 ---
 
@@ -20,25 +21,23 @@ travail lisible et vérifiable.
 - [Fonctionnalités](#fonctionnalités)
 - [Structure du dépôt](#structure-du-dépôt)
 - [Prérequis](#prérequis)
-- [Utilisation](#utilisation)
+- [Spider — utilisation](#spider--utilisation)
+- [Scorpion — utilisation](#scorpion--utilisation)
 - [Architecture et flux de données](#architecture-et-flux-de-données)
-- [Détail du code](#détail-du-code)
+- [Spider — détail du code](#spider--détail-du-code)
+- [Scorpion — détail du code](#scorpion--détail-du-code)
 - [Choix techniques et sécurité](#choix-techniques-et-sécurité)
 - [Gestion des erreurs](#gestion-des-erreurs)
 - [Tests](#tests)
 - [Limites connues et améliorations possibles](#limites-connues-et-améliorations-possibles)
-- [Scorpion — prochaine étape](#scorpion--prochaine-étape)
+- [Bonus du sujet](#bonus-du-sujet)
+- [Compétences mises en œuvre](#compétences-mises-en-œuvre)
 
 ---
 
 ## Contexte et état du projet
 
-Le sujet impose deux programmes :
-
-1. **Spider** : extraire et télécharger récursivement les images d'un site ;
-2. **Scorpion** : lire et afficher les métadonnées EXIF des images.
-
-Contraintes importantes du sujet :
+Le sujet impose deux programmes, avec une contrainte importante :
 
 - les requêtes HTTP et la manipulation de fichiers sont autorisées ;
 - **la logique doit être écrite soi-même** ;
@@ -49,29 +48,54 @@ Contraintes importantes du sujet :
 | Élément | État |
 | --- | --- |
 | Spider | Terminé et testé |
-| Scorpion | À venir |
+| Scorpion | Terminé et testé |
+| Bonus (modification de métadonnées, interface graphique) | Non implémentés |
 
-Spider utilise uniquement la **bibliothèque standard** de Python
-(`urllib`, `html.parser`, `argparse`, `pathlib`, `hashlib`, etc.), sans aucune
-dépendance externe.
+Spider utilise uniquement la **bibliothèque standard** de Python.
+Scorpion utilise **Pillow** pour ouvrir les images et lire les données EXIF,
+mais toute la logique de sélection, de conversion et d'affichage est écrite
+dans le projet.
 
 ---
 
 ## Fonctionnalités
 
+### Spider
+
 - Extraction des images depuis le HTML (`<img src="...">`).
-- Téléchargement des images au format binaire.
+- Téléchargement binaire des images.
 - Résolution des URLs relatives (`urljoin`).
 - Récursion optionnelle via les liens `<a href="...">`.
 - Limite de profondeur configurable (`-l`, défaut 5).
 - Dossier de sortie configurable (`-p`, défaut `./data/`).
-- Restriction au même site pour les pages (évite de crawler tout le Web).
+- Restriction au même site pour les pages.
 - Détection et évitement des boucles de navigation.
 - Déduplication des pages visitées et des images téléchargées.
 - Gestion des URLs non-ASCII (percent-encoding).
 - Noms de fichiers sans collision grâce à un hash court.
-- Gestion d'erreur **par page** et **par image** : un 404 n'arrête pas le crawl.
-- Extensions prises en charge : `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`.
+- Gestion d'erreur par page et par image.
+- Extensions : `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`.
+
+### Scorpion
+
+- Accepte un ou plusieurs fichiers en argument.
+- Détecte le format réel via Pillow, indépendamment de l'extension.
+- Affiche les informations techniques : format, dimensions, mode couleur,
+  taille sur disque.
+- Affiche les dates du système de fichiers : `Changed`, `Modified`, et
+  `Created` quand la plateforme expose `st_birthtime`.
+- Lit et affiche les tags EXIF principaux.
+- Traduit les identifiants de tags en noms lisibles (`Make`, `Model`,
+  `DateTimeOriginal`, etc.).
+- Formate les dates EXIF, les nombres rationnels, les bytes, les tuples.
+- Traduit l'orientation EXIF en texte (`6 (Rotate 90 CW)`).
+- Lit le sous-IFD GPS et affiche :
+  - latitude et longitude en degrés décimaux et en DMS ;
+  - altitude ;
+  - date et heure GPS en UTC.
+- Gère les images sans EXIF, sans GPS, les GPS partiels, les fichiers
+  corrompus, les fichiers absents et les métadonnées malformées.
+- Extensions : `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`.
 
 ---
 
@@ -81,42 +105,48 @@ dépendance externe.
 Piscine_Cybersecurity/
 └── days_0/
     ├── spider/
-    │   └── spider.py      # programme principal
-    └── scorpion/          # exercice 2 (à venir)
+    │   └── spider.py
+    └── scorpion/
+        ├── scorpion.py
+        ├── sample.png
+        ├── sample_exif.jpg
+        ├── sample_rich.jpg
+        ├── sample_gps.jpg
+        ├── sample_gps_partial.jpg
+        ├── sample.gif
+        └── sample.bmp
 ```
 
 Le sujet PDF (`days_0/en.subject.pdf`) n'est volontairement pas versionné.
+
+Les fichiers `sample*` sont des images de test générées pour vérifier Scorpion :
+PNG sans EXIF, JPEG avec EXIF simples, JPEG avec EXIF riches, JPEG avec GPS
+complet, JPEG avec GPS partiel, GIF et BMP.
 
 ---
 
 ## Prérequis
 
-- **Python 3.10 ou supérieur** (le code utilise `str | None` et les types
-  génériques modernes comme `list[str]`).
-- Aucun paquet à installer.
-- Pour les tests : un serveur HTTP local, fourni par Python.
+- **Python 3.10 ou supérieur** (types `str | None`, `list[str]`, etc.).
+- **Pillow** pour Scorpion :
 
-Testé avec Python 3.14 sous Linux.
+```bash
+python3 -m pip install pillow
+```
+
+Spider n'a besoin d'aucune dépendance externe.
+
+Testé avec Python 3.14 et Pillow 12.3.0 sous Linux.
 
 ---
 
-## Utilisation
+## Spider — utilisation
 
 Depuis `days_0/spider/` :
 
 ```bash
 python3 spider.py URL
-```
-
-Avec récursion et profondeur :
-
-```bash
 python3 spider.py -r -l 3 URL
-```
-
-Avec un dossier de sortie personnalisé :
-
-```bash
 python3 spider.py -p ./mes_images URL
 ```
 
@@ -140,20 +170,7 @@ Notes :
 - `-l 0` avec `-r` analyse uniquement la page de départ ;
 - une profondeur négative est refusée avec un code de sortie `2`.
 
-### Exemples
-
-```bash
-# Une seule page
-python3 spider.py https://example.com
-
-# Récursion sur 2 niveaux
-python3 spider.py -r -l 2 https://example.com
-
-# Sortie dans /tmp/images
-python3 spider.py -r -p /tmp/images https://example.com
-```
-
-Exemple de sortie :
+### Exemple de sortie
 
 ```text
 200 text/html
@@ -168,7 +185,47 @@ Exemple de sortie :
 
 ---
 
+## Scorpion — utilisation
+
+Depuis `days_0/scorpion/` :
+
+```bash
+python3 scorpion.py FILE1 [FILE2 ...]
+```
+
+Exemples :
+
+```bash
+python3 scorpion.py sample.png
+python3 scorpion.py sample_rich.jpg sample_gps.jpg
+python3 scorpion.py sample.png sample_rich.jpg sample_gps_partial.jpg
+```
+
+### Exemple de sortie
+
+```text
+File      : sample_gps.jpg
+Format    : JPEG
+Dimensions: 320 x 240
+Mode      : RGB
+Size      : 2111 bytes
+Changed   : 2026-11-10 17:15:46
+Modified  : 2026-11-10 17:15:46
+tags: 3
+Model               : Model X
+Make                : GPSCam
+GPS data:
+Latitude  : 48.856667 (48°51'24.0" N)
+Longitude : 2.294444 (2°17'40.0" E)
+Altitude  : 35 m
+Timestamp : 2024-01-02 14:30:00 UTC
+```
+
+---
+
 ## Architecture et flux de données
+
+### Spider
 
 ```text
 main()
@@ -188,15 +245,34 @@ main()
       └─ queue.append((link, depth + 1))
 ```
 
-Le parcours est un **BFS** (breadth-first search) : les pages sont visitées
-niveau par niveau grâce à une file `deque`.
+Le parcours est un **BFS** : les pages sont visitées niveau par niveau grâce à
+une file `deque`.
+
+### Scorpion
+
+```text
+main()
+ │
+ └─ pour chaque fichier :
+      show_basic_info(path)
+        ├─ Image.open(path)
+        ├─ Path(path).stat()
+        ├─ format, dimensions, mode, taille
+        ├─ dates système (Changed, Modified, Created si dispo)
+        └─ show_exif(img.getexif())
+             ├─ tags EXIF principaux via format_value()
+             └─ show_gps(exif)
+                  ├─ exif.get_ifd(0x8825)
+                  ├─ to_decimal() / format_dms()
+                  ├─ altitude
+                  └─ timestamp GPS
+```
 
 ---
 
-## Détail du code
+## Spider — détail du code
 
-Le fichier `days_0/spider/spider.py` est organisé en petites fonctions
-indépendantes et testables.
+Le fichier est organisé en petites fonctions indépendantes.
 
 ### `ImageParser(HTMLParser)`
 
@@ -217,10 +293,11 @@ class ImageParser(HTMLParser):
             self.images.append(src)
 ```
 
-- `HTMLParser` fournit le moteur d'analyse ; `feed(html)` déclenche les callbacks.
-- `handle_starttag` est appelé pour chaque balise ouvrante.
-- `dict(attrs)` transforme la liste de tuples `(nom, valeur)` en dictionnaire.
-- `.get("src")` évite un `KeyError` si l'attribut est absent.
+- `HTMLParser` fournit le moteur d'analyse ; `feed(html)` déclenche les
+  callbacks ;
+- `handle_starttag` est appelé pour chaque balise ouvrante ;
+- `dict(attrs)` transforme la liste de tuples en dictionnaire ;
+- `.get("src")` évite un `KeyError` ;
 - `if src:` écarte `None` et la chaîne vide.
 
 ### `LinkParser(HTMLParser)`
@@ -244,18 +321,15 @@ def normalize_url(url: str) -> str:
     return quote(url, safe=":/?#[]@!$&'()*+,;=%")
 ```
 
-Cette fonction percent-encode les caractères non-ASCII afin que la requête HTTP
-reste valide.
-
-Pourquoi c'est nécessaire : la ligne de requête HTTP doit être ASCII. Une URL
-contenant `é` brut provoque :
+Percent-encode les caractères non-ASCII afin que la requête HTTP reste valide.
+Une URL contenant `é` brut provoquerait :
 
 ```text
 UnicodeEncodeError: 'ascii' codec can't encode character '\xe9'
 ```
 
-`é` devient `%C3%A9`. Les caractères réservés (`:`, `/`, `?`, `&`, `=`, `#`) et
-les `%` déjà présents sont laissés intacts, donc la fonction est **idempotente**.
+`é` devient `%C3%A9`. Les caractères réservés et les `%` déjà présents sont
+préservés, donc la fonction est **idempotente**.
 
 ### `is_image_url(url)`
 
@@ -264,17 +338,14 @@ path = urlsplit(url).path.lower()
 return path.endswith(VALID_EXTENSIONS)
 ```
 
-- on isole le **chemin** : la query string et le fragment sont ignorés ;
-- on compare en minuscules pour accepter `PHOTO.JPG` ;
+- on isole le chemin : la query string et le fragment sont ignorés ;
+- comparaison insensible à la casse ;
 - `endswith` reçoit le tuple `VALID_EXTENSIONS`.
-
-Sans `urlsplit`, `"a.png?x=1".endswith(".png")` renverrait `False` à tort.
 
 ### `extract_images(html)` et `extract_links(html)`
 
-Deux fonctions qui instancient le parseur, appellent `feed` puis `close`, et
-renvoient le résultat. `extract_images` applique en plus le filtre
-`is_image_url`.
+Instancient le parseur, appellent `feed` puis `close`, et renvoient le résultat.
+`extract_images` applique en plus le filtre `is_image_url`.
 
 ### `same_site(base_url, url)`
 
@@ -287,14 +358,12 @@ return (
 )
 ```
 
-- seuls `http` et `https` sont acceptés (`mailto:`, `javascript:`, `ftp:` sont
-  rejetés) ;
+- seuls `http` et `https` sont acceptés ;
 - l'hôte et le port doivent être identiques à ceux de la page de départ ;
-- la comparaison est insensible à la casse.
+- comparaison insensible à la casse.
 
-Cette restriction évite qu'un lien externe fasse partir le spider sur tout le
-Web. Les **images** peuvent en revanche être hébergées sur un autre domaine
-(CDN), ce qui est courant.
+Cette restriction évite de crawler tout le Web. Les **images** peuvent en
+revanche être hébergées sur un autre domaine (CDN).
 
 ### `crawl_page(start_url, max_depth, out)`
 
@@ -313,28 +382,24 @@ while queue:
 
 Points clés :
 
-- **file FIFO** : `deque` + `popleft()` pour un BFS efficace ;
-- **profondeur** : chaque entrée est un couple `(url, depth)` ; on ajoute les
-  liens avec `depth + 1` ;
-- **anti-boucle** : `visited` empêche de revisiter une page ;
-- **anti-doublon image** : `seen_images` mémorise les URLs absolues déjà
-  téléchargées ;
-- **fragment** : `urldefrag` retire `#ancre`, inutile côté serveur ;
-- **erreurs** : `HTTPError` et `URLError` sont attrapés page par page ;
-- **profondeur** : au-delà de `max_depth`, les liens de la page ne sont pas
-  suivis, mais ses images sont quand même téléchargées.
+- file FIFO avec `deque` + `popleft()` ;
+- profondeur transportée dans chaque entrée `(url, depth)` ;
+- `visited` empêche de revisiter une page ;
+- `seen_images` mémorise les URLs absolues déjà téléchargées ;
+- `urldefrag` retire `#ancre`, inutile côté serveur ;
+- erreurs `HTTPError` / `URLError` attrapées page par page ;
+- au-delà de `max_depth`, les liens ne sont pas suivis, mais les images de la
+  page sont quand même téléchargées.
 
 ### `parse_arg()`
 
-Construit l'interface en ligne de commande avec `argparse` :
+Interface `argparse` :
 
 - `url` positionnel obligatoire ;
 - `-r` booléen (`store_true`) ;
-- `-l` entier avec `type=int` et défaut 5 ;
+- `-l` entier avec `type=int`, défaut 5 ;
 - `-p` chemin avec défaut `./data/` ;
-- validation : `depth >= 0`, sinon `parser.error(...)` et code de sortie 2.
-
-`argparse` gère aussi l'aide (`-h`) et les erreurs d'usage.
+- validation : `depth >= 0`, sinon `parser.error(...)` et code 2.
 
 ### `fetch(url)`
 
@@ -344,11 +409,10 @@ with urlopen(req, timeout=10) as resp:
     html = resp.read().decode("utf-8", errors="replace")
 ```
 
-- `User-Agent` explicite, car certains serveurs refusent le client Python par
-  défaut ;
-- `timeout=10` pour éviter un blocage réseau ;
-- `.read()` renvoie des `bytes`, décodés en UTF-8 pour obtenir du texte ;
-- les erreurs réseau/HTTP remontent à l'appelant, qui décide quoi faire.
+- `User-Agent` explicite ;
+- `timeout=10` pour éviter un blocage ;
+- `.read()` renvoie des `bytes`, décodés en UTF-8 ;
+- les erreurs réseau/HTTP remontent à l'appelant.
 
 ### `filename_from_url(url)`
 
@@ -364,10 +428,8 @@ return f"{stem}_{digest}{suffix}"
 ```
 
 - `urlsplit(url).path` isole le chemin ;
-- `posixpath.basename` retire les dossiers et les `../` (protection contre la
-  traversée de répertoire) ;
-- un hash court de l'URL complète est ajouté pour éviter les collisions
-  (`a/logo.png` et `b/logo.png` ne s'écrasent plus) ;
+- `posixpath.basename` retire les dossiers et les `../` ;
+- un hash court de l'URL complète évite les collisions ;
 - le hash est déterministe : même URL, même nom.
 
 Exemple : `logo.png` peut devenir `logo_8c8dc35b.png`.
@@ -382,8 +444,8 @@ with urlopen(req, timeout=10) as resp:
 return target
 ```
 
-- lit les **octets** sans décodage (indispensable pour une image) ;
-- écrit en binaire avec `write_bytes` (`wb` en C) ;
+- lecture des **octets** sans décodage ;
+- écriture binaire avec `write_bytes` ;
 - retourne le chemin écrit, ou `None` si aucun nom n'est dérivable.
 
 ### `main()`
@@ -399,30 +461,155 @@ print(f"{len(pages)} page(s) visited")
 
 - sans `-r`, `max_depth = 0` : une seule page ;
 - avec `-r`, la profondeur vient de `-l` ;
-- le dossier est créé avant le crawl ;
-- un résumé du nombre de pages visitées est affiché à la fin.
+- le dossier est créé avant le crawl.
+
+---
+
+## Scorpion — détail du code
+
+### Constantes
+
+```python
+DATE_TAGS = {306, 36867, 36868}
+ORIENTATION_LABELS = {1: "Horizontal", ..., 8: "Rotate 270 CW"}
+GPS_IFD = 0x8825
+```
+
+- `DATE_TAGS` : identifiants des tags de date EXIF ;
+- `ORIENTATION_LABELS` : traduction des valeurs d'orientation ;
+- `GPS_IFD` : pointeur vers le sous-IFD GPS (`34853`).
+
+### `parse_args()`
+
+`argparse` avec un argument positionnel `files` et `nargs="+"` :
+
+- `scorpion a.jpg` → `["a.jpg"]` ;
+- `scorpion a.jpg b.png` → `["a.jpg", "b.png"]` ;
+- sans fichier → erreur argparse, code 2.
+
+### `show_basic_info(path)`
+
+Ouvre l'image avec Pillow et affiche :
+
+- le chemin ;
+- le format détecté par le contenu ;
+- les dimensions ;
+- le mode couleur ;
+- la taille en octets ;
+- `Created` si `st_birthtime` existe ;
+- `Changed` (`st_ctime`) ;
+- `Modified` (`st_mtime`) ;
+- puis appelle `show_exif(img.getexif())`.
+
+Sous Linux, `st_ctime` est un changement d'inode, pas une création : le label
+`Changed` est donc plus honnête que `Created`.
+
+### `show_exif(exif)`
+
+- si `exif` est vide → `No EXIF data` ;
+- sinon affiche le nombre de tags ;
+- parcourt `exif.items()` ;
+- ignore le tag `GPSInfo` (`0x8825`), qui n'est qu'un offset ;
+- traduit les identifiants avec `TAGS.get(tag_id, tag_id)` ;
+- formate les valeurs avec `format_value` ;
+- appelle `show_gps(exif)` à la fin.
+
+### `format_value(tag_id, value)`
+
+Gère les types rencontrés dans les EXIF :
+
+| Cas | Traitement |
+| --- | --- |
+| tag de date + `str` | `2024:01:02 03:04:05` → `2024-01-02 03:04:05` |
+| orientation `274` + `int` | `6` → `6 (Rotate 90 CW)` |
+| `IFDRational` | entier, fraction `1/120`, ou décimal `2.8` |
+| `bytes` | décodage UTF-8 avec remplacement, puis suppression des `\x00` |
+| `tuple` / `list` | jointure avec `, ` |
+| autre | `str(value)` |
+
+L'ordre des tests est important : les cas spécifiques d'abord, le fallback
+`str(value)` en dernier.
+
+### `to_decimal(coord, ref)`
+
+Convertit `(degrés, minutes, secondes)` en degrés décimaux :
+
+```text
+d + m/60 + s/3600
+```
+
+La valeur est négative si `ref` vaut `S` ou `W`. La fonction vérifie que
+`coord` contient bien trois valeurs, sinon elle lève `ValueError`.
+
+### `valid_coord(coord)`
+
+Retourne `True` si `coord` est une séquence de trois valeurs. Utilisé pour
+éviter les plantages sur des GPS malformés.
+
+### `format_dms(coord, ref)`
+
+Construit la représentation lisible :
+
+```text
+48°51'24.0" N
+```
+
+### `show_gps(exif)`
+
+- récupère le sous-IFD avec `exif.get_ifd(GPS_IFD)` ;
+- si vide → `No GPS data` ;
+- vérifie la présence et la forme des coordonnées ;
+- affiche latitude et longitude en décimal et en DMS ;
+- affiche l'altitude si elle existe ;
+- affiche le timestamp GPS en UTC si la date et l'heure sont valides ;
+- ignore proprement les champs absents ou invalides.
+
+### `main()`
+
+Pour chaque fichier :
+
+```python
+try:
+    show_basic_info(path)
+except FileNotFoundError:
+    ...
+except PermissionError:
+    ...
+except UnidentifiedImageError:
+    ...
+except OSError as e:
+    ...
+except (ValueError, TypeError, OverflowError) as e:
+    ...
+finally:
+    print()
+```
+
+Le `finally` garantit une ligne vide entre les fichiers, même en cas d'erreur.
 
 ---
 
 ## Choix techniques et sécurité
 
-### Bibliothèque standard uniquement
+### Bibliothèque standard pour Spider
 
 `urllib` et `html.parser` suffisent à faire des requêtes et à analyser du HTML.
-Cela respecte l'esprit du sujet et évite les dépendances. `wget` et `scrapy`
-sont volontairement absents.
+Aucune dépendance externe, `wget` et `scrapy` sont volontairement absents.
+
+### Pillow pour Scorpion
+
+Pillow ouvre les formats de façon fiable et expose les EXIF et le sous-IFD GPS.
+La logique de sélection, de conversion et d'affichage reste dans le projet.
 
 ### BFS plutôt que DFS
 
-Le BFS visite les pages par niveau de profondeur, ce qui rend la limite `-l`
-naturelle et prévisible. `deque.popleft()` est en O(1), contrairement à
-`list.pop(0)`.
+Le BFS visite les pages par niveau de profondeur, ce qui rend `-l` naturel et
+prévisible. `deque.popleft()` est en O(1).
 
 ### Périmètre limité au même site
 
 `same_site` empêche le spider de suivre des liens externes. C'est une mesure de
-sécurité et de bon sens : sans elle, un site contenant un lien vers un moteur de
-recherche pourrait entraîner un crawl incontrôlé.
+sécurité et de bon sens.
 
 ### Noms de fichiers sûrs
 
@@ -430,10 +617,12 @@ recherche pourrait entraîner un crawl incontrôlé.
 - le hash évite les collisions entre URLs différentes ;
 - aucune donnée venue du serveur n'est utilisée comme chemin complet.
 
-### Images en binaire
+### Images et métadonnées non fiables
 
-Une image ne doit jamais être décodée en texte. Le code lit et écrit des
-`bytes`, ce qui préserve son intégrité.
+- les images sont lues en binaire, jamais décodées en texte ;
+- les métadonnées EXIF sont traitées comme des données non fiables :
+  vérification des coordonnées, des types de dates, des longueurs d'heure ;
+- les erreurs de métadonnées sont isolées par fichier.
 
 ### URLs normalisées
 
@@ -442,8 +631,8 @@ qui permet de traiter des pages contenant des liens accentués sans planter.
 
 ### Déduplication
 
-- pages : `visited` (ensemble des URLs absolues) ;
-- images : `seen_images` (ensemble des URLs absolues).
+- pages : `visited` ;
+- images : `seen_images`.
 
 La déduplication se fait sur l'URL **résolue**, pas sur le `src` brut.
 
@@ -451,24 +640,39 @@ La déduplication se fait sur l'URL **résolue**, pas sur le `src` brut.
 
 ## Gestion des erreurs
 
+### Spider
+
 | Situation | Comportement |
 | --- | --- |
-| Page 404 / 403 / 500 | `[SKIP] ... HTTP <code>`, page ignorée, crawl poursuivi |
+| Page 404 / 403 / 500 | `[SKIP] ... HTTP <code>`, page ignorée |
 | Connexion refusée / DNS / timeout | `[SKIP] ... <raison>`, page ignorée |
-| Image 404 | `[FAIL] ... HTTP <code>`, les autres images continuent |
+| Image 404 | `[FAIL] ... HTTP <code>`, les autres continuent |
 | Image réseau indisponible | `[FAIL] ... <raison>` |
-| Profondeur négative | message d'argparse, code de sortie 2 |
-| URL manquante | message d'argparse, code de sortie 2 |
-| Image sans nom dérivable | ignorée (`filename_from_url` renvoie `None`) |
+| Profondeur négative | message d'argparse, code 2 |
+| URL manquante | message d'argparse, code 2 |
+| Image sans nom dérivable | ignorée |
 
-Un `try/except` est placé **dans** la boucle, au niveau de chaque page et de
-chaque image, pour qu'une erreur isolée ne fasse pas tomber tout le programme.
+### Scorpion
+
+| Situation | Comportement |
+| --- | --- |
+| Fichier absent | `file not found` |
+| Permission refusée | `permission denied` |
+| Fichier non-image | `not a valid image` |
+| Fichier tronqué / corrompu | message OSError, fichier ignoré |
+| Dossier passé en argument | `Is a directory` |
+| Aucun EXIF | `No EXIF data` |
+| Aucun GPS | `No GPS data` |
+| GPS incomplet | `Incomplete GPS data` |
+| Coordonnée GPS invalide | `Invalid GPS coordinate` |
+| Métadonnée malformée | `invalid metadata (...)`, fichier ignoré |
+| Un fichier échoue | les suivants sont quand même traités |
 
 ---
 
 ## Tests
 
-### Test de bout en bout avec un serveur local
+### Spider — serveur local
 
 Créer un petit site :
 
@@ -535,61 +739,94 @@ python3 spider.py -r -l 1 -p /tmp/spider-out http://127.0.0.1:8000/index.html
 Résultat attendu :
 
 - `index.html` et `gallery.html` visités ;
-- deux images téléchargées depuis `index` (`a.png`, `b.JPG`) ;
-- `d.bmp` téléchargée depuis `gallery` ;
-- `notes.txt` ignorée (extension non valide) ;
-- `absent.png` en échec 404, sans arrêter le programme.
+- `a.png` et `b.JPG` téléchargées ;
+- `notes.txt` ignorée ;
+- `absent.png` en échec 404, sans arrêter le programme ;
+- `d.bmp` téléchargée depuis `gallery`.
 
-### Test des URLs accentuées
+### Spider — URLs accentuées
 
-Créer une page `café.html` référencée par un lien `café.html` et une image
-`img/été.png`. Le spider doit :
+Une page `café.html` référencée par un lien accentué doit être encodée en
+`caf%C3%A9.html` et visitée sans `UnicodeEncodeError`.
 
-- encoder le lien en `caf%C3%A9.html` ;
-- visiter la page ;
-- télécharger l'image sans `UnicodeEncodeError`.
+### Scorpion — images de test
+
+Les fichiers `sample*` permettent de vérifier les cas principaux :
+
+```bash
+cd days_0/scorpion
+python3 scorpion.py sample.png sample_exif.jpg
+python3 scorpion.py sample_rich.jpg
+python3 scorpion.py sample_gps.jpg
+python3 scorpion.py sample_gps_partial.jpg
+python3 scorpion.py sample.gif sample.bmp
+```
+
+Résultats attendus :
+
+- `sample.png`, `sample.gif`, `sample.bmp` : `No EXIF data` ;
+- `sample_exif.jpg` : tags `Make`, `Model`, `DateTime`, `DateTimeOriginal` ;
+- `sample_rich.jpg` : dates formatées, rationnels (`1/120`, `2.8`, `50`),
+  orientation lisible, `No GPS data` ;
+- `sample_gps.jpg` : latitude, longitude, altitude, timestamp UTC ;
+- `sample_gps_partial.jpg` : latitude/longitude seulement, sans crash.
+
+### Scorpion — erreurs
+
+```bash
+python3 scorpion.py missing.jpg
+python3 scorpion.py /tmp
+python3 scorpion.py notes.txt
+```
+
+Chaque cas doit afficher un message lisible, sans traceback, et le programme
+continue avec les fichiers suivants.
 
 ### Vérifications statiques
 
 ```bash
 python3 -m py_compile days_0/spider/spider.py
+python3 -m py_compile days_0/scorpion/scorpion.py
+python3 -m flake8 days_0/spider/spider.py
+python3 -m flake8 days_0/scorpion/scorpion.py
 ```
 
 ---
 
 ## Limites connues et améliorations possibles
 
-- **Pas de `robots.txt`** : à ajouter pour un usage responsable sur de vrais
-  sites.
-- **Pas de limitation de débit** : aucun délai entre les requêtes.
-- **Pas de gestion de `<base href>`**, de `srcset`, ni des attributs `data-src`
-  utilisés par le lazy loading.
-- **Liens non-HTML** : un lien vers un `.css` ou un `.pdf` serait visité comme
-  une page. Un contrôle du `Content-Type` serait plus robuste.
-- **Noms de fichiers percent-encodés** pour les URLs non-ASCII
-  (`%C3%A9t%C3%A9_...png`). Fonctionnel, mais moins lisible.
-- **Code de sortie** : une page de départ inaccessible n'entraîne pas un code
-  de sortie non nul.
-- **Pas de parallélisme** : le crawl est séquentiel.
-- **Aucune validation du `Content-Type`** avant d'écrire une image.
+### Spider
 
-Ces points ne bloquent pas l'exercice mais constituent des pistes
-d'amélioration naturelles.
+- Pas de `robots.txt` ni de limitation de débit.
+- Pas de gestion de `<base href>`, `srcset`, `data-src` (lazy loading).
+- Les liens vers des ressources non-HTML (`.css`, `.pdf`) seraient visités
+  comme des pages.
+- Noms de fichiers percent-encodés pour les URLs non-ASCII.
+- Code de sortie `0` même si la page de départ échoue.
+- Crawl séquentiel, sans parallélisme.
+
+### Scorpion
+
+- Les variantes EXIF exotiques (tags imbriqués, commentaires avec préfixe
+  d'encodage) ne sont pas toutes interprétées.
+- Le GPS est affiché, mais pas converti en lien de carte.
+- Pas de modification ni de suppression de métadonnées (bonus).
+- Pas d'interface graphique (bonus).
+- `st_ctime` dépend de la plateforme : sous Linux, ce n'est pas la création.
+- Les dates sont affichées en heure locale pour le système de fichiers, en UTC
+  pour le GPS.
 
 ---
 
-## Scorpion — prochaine étape
+## Bonus du sujet
 
-Le dossier `days_0/scorpion/` est réservé au second programme :
+Le bonus n'est pas implémenté. Il pourrait inclure :
 
-```text
-./scorpion FILE1 [FILE2 ...]
-```
+- une option Scorpion pour modifier ou supprimer les métadonnées d'un fichier
+  (par exemple avec `piexif`) ;
+- une interface graphique de visualisation et de gestion des métadonnées.
 
-Objectif : lire les métadonnées EXIF et les afficher, pour les mêmes extensions
-que Spider. Il devra au minimum afficher la date de création et les données
-EXIF, avec un format de sortie libre. Le bonus du sujet prévoit la modification
-ou la suppression des métadonnées, ainsi qu'une interface graphique.
+Le bonus ne doit être évalué que si la partie obligatoire est parfaite.
 
 ---
 
@@ -597,12 +834,16 @@ ou la suppression des métadonnées, ainsi qu'une interface graphique.
 
 - Requêtes HTTP avec la bibliothèque standard (`urllib`).
 - Analyse de HTML avec `html.parser`.
-- Parcours de graphe en largeur (BFS) avec file `deque`.
+- Parcours de graphe en largeur (BFS) avec `deque`.
 - Gestion de la profondeur et des cycles.
 - Résolution d'URLs relatives (`urljoin`, `urldefrag`).
-- Encodage percent-encoding et gestion de l'Unicode.
+- Percent-encoding et gestion de l'Unicode.
 - Téléchargement et écriture de données binaires.
 - Sécurité des chemins de fichiers (`basename`, hash anti-collision).
+- Lecture d'images et de métadonnées avec Pillow.
+- Lecture EXIF, sous-IFD GPS, rationnels, dates.
+- Conversion DMS → degrés décimaux.
 - Interface CLI avec `argparse`.
-- Gestion d'erreurs isolée par page et par image.
-- Tests manuels avec un serveur HTTP local.
+- Gestion d'erreurs isolée par page, par image et par fichier.
+- Traitement de métadonnées non fiables.
+- Tests manuels avec un serveur HTTP local et des images générées.

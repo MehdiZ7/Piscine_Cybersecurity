@@ -11,3 +11,6 @@ venv/
 days_0/spider/data/
 data/
 *.log
+
+# Fichiers de test invalides
+days_0/scorpion/not_an_image.png

@@ -1,0 +1,207 @@
+import argparse
+from datetime import datetime
+from pathlib import Path
+
+from PIL import Image, UnidentifiedImageError
+from PIL.ExifTags import TAGS
+from PIL.TiffImagePlugin import IFDRational
+
+
+DATE_TAGS = {306, 36867, 36868}
+ORIENTATION_LABELS = {
+    1: "Horizontal",
+    2: "Mirror horizontal",
+    3: "Rotate 180",
+    4: "Mirror vertical",
+    5: "Mirror horizontal and rotate 270 CW",
+    6: "Rotate 90 CW",
+    7: "Mirror horizontal and rotate 90 CW",
+    8: "Rotate 270 CW",
+}
+GPS_IFD = 0x8825
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse the command-line arguments for scorpion."""
+    parser = argparse.ArgumentParser(
+        prog="scorpion",
+        description="Display image metadata (EXIF and basic attributes).",
+    )
+    parser.add_argument(
+        "files",
+        nargs="+",
+        metavar="FILE",
+        help="image file(s) to inspect",
+    )
+    return parser.parse_args()
+
+
+def show_basic_info(path: str) -> None:
+    """Display basic technical information about an image file.
+
+    Open the file with Pillow and print its path, format, dimensions,
+    color mode, size on disk, and filesystem dates.
+    """
+    with Image.open(path) as img:
+        stat = Path(path).stat()
+        print(f"{'File':<10}: {path}")
+        print(f"{'Format':<10}: {img.format}")
+        print(f"{'Dimensions':<10}: {img.width} x {img.height}")
+        print(f"{'Mode':<10}: {img.mode}")
+        print(f"{'Size':<10}: {stat.st_size} bytes")
+        if hasattr(stat, "st_birthtime"):
+            created = datetime.fromtimestamp(stat.st_birthtime)
+            print(f"{'Created':<10}: {created:%Y-%m-%d %H:%M:%S}")
+        changed = datetime.fromtimestamp(stat.st_ctime)
+        modified = datetime.fromtimestamp(stat.st_mtime)
+        print(f"{'Changed':<10}: {changed:%Y-%m-%d %H:%M:%S}")
+        print(f"{'Modified':<10}: {modified:%Y-%m-%d %H:%M:%S}")
+        show_exif(img.getexif())
+
+
+def show_exif(exif: Image.Exif) -> None:
+    """Display the main EXIF tags and GPS metadata."""
+    if not exif:
+        print("No EXIF data")
+        return
+    print(f"tags: {len(exif)}")
+    for tag_id, value in exif.items():
+        if tag_id == GPS_IFD:
+            continue
+        name = TAGS.get(tag_id, tag_id)
+        print(f"{name:<20}: {format_value(tag_id, value)}")
+    show_gps(exif)
+
+
+def format_value(tag_id: int, value: object) -> str:
+    """Return a readable string for an EXIF tag value.
+
+    Dates are normalized, rationals are rendered as integers, fractions,
+    or decimals, and bytes and sequences are converted to text.
+    """
+    if tag_id in DATE_TAGS and isinstance(value, str):
+        return value.replace(":", "-", 2)
+    if tag_id == 274 and isinstance(value, int):
+        label = ORIENTATION_LABELS.get(value, "Unknown")
+        return f"{value} ({label})"
+    if isinstance(value, IFDRational):
+        if value.denominator == 1:
+            return str(value.numerator)
+        if value.numerator == 1:
+            return f"1/{value.denominator}"
+        return f"{float(value):.4g}"
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace").rstrip("\x00")
+    if isinstance(value, (tuple, list)):
+        return ", ".join(str(item) for item in value)
+    return str(value)
+
+
+def to_decimal(coord: tuple, ref: str) -> float:
+    """Convert an EXIF GPS coordinate to decimal degrees.
+
+    coord is a (degrees, minutes, seconds) sequence. The result is
+    negative for southern latitudes and western longitudes.
+    """
+    if not isinstance(coord, (tuple, list)) or len(coord) != 3:
+        raise ValueError("invalid GPS coordinate")
+    degrees, minutes, seconds = (float(value) for value in coord)
+    result = degrees + minutes / 60 + seconds / 3600
+    if isinstance(ref, str) and ref.upper() in ("S", "W"):
+        result = -result
+    return result
+
+
+def valid_coord(coord: object) -> bool:
+    """Return True when coord is a three-value GPS coordinate."""
+    return isinstance(coord, (tuple, list)) and len(coord) == 3
+
+
+def format_dms(coord: tuple, ref: str) -> str:
+    """Format a GPS coordinate as degrees, minutes and seconds."""
+    degrees, minutes, seconds = (float(value) for value in coord)
+    return f"{degrees:.0f}°{minutes:.0f}'{seconds:.1f}\" {ref}"
+
+
+def show_gps(exif: Image.Exif) -> None:
+    """Display GPS metadata when present."""
+    gps = exif.get_ifd(GPS_IFD)
+    if not gps:
+        print("No GPS data")
+        return
+
+    print("GPS data:")
+    lat = gps.get(2)
+    lat_ref = gps.get(1, "")
+    lon = gps.get(4)
+    lon_ref = gps.get(3, "")
+
+    if not valid_coord(lat) or not valid_coord(lon):
+        print("Incomplete GPS data")
+        return
+
+    try:
+        lat_decimal = to_decimal(lat, lat_ref)
+        lon_decimal = to_decimal(lon, lon_ref)
+        lat_dms = format_dms(lat, lat_ref)
+        lon_dms = format_dms(lon, lon_ref)
+    except (TypeError, ValueError):
+        print("Invalid GPS coordinate")
+        return
+
+    print(f"{'Latitude':<10}: {lat_decimal:.6f} ({lat_dms})")
+    print(f"{'Longitude':<10}: {lon_decimal:.6f} ({lon_dms})")
+
+    altitude = gps.get(6)
+    altitude_ref = gps.get(5)
+    if altitude is not None:
+        try:
+            meters = float(altitude)
+        except (TypeError, ValueError):
+            meters = None
+        if meters is not None:
+            if altitude_ref in (b"\x01", 1):
+                meters = -meters
+            print(f"{'Altitude':<10}: {meters:g} m")
+
+    date = gps.get(29)
+    time = gps.get(7)
+    if (
+        date
+        and isinstance(date, str)
+        and isinstance(time, (tuple, list))
+        and len(time) == 3
+    ):
+        try:
+            hours, minutes, seconds = (int(float(x)) for x in time)
+        except (TypeError, ValueError):
+            return
+        date_text = date.replace(":", "-", 2)
+        print(
+            f"{'Timestamp':<10}: {date_text} "
+            f"{hours:02d}:{minutes:02d}:{seconds:02d} UTC"
+        )
+
+
+def main() -> None:
+    """Run scorpion from the command line."""
+    args = parse_args()
+    for path in args.files:
+        try:
+            show_basic_info(path)
+        except FileNotFoundError:
+            print(f"Error on file {path}: file not found")
+        except PermissionError:
+            print(f"Error on file {path}: permission denied")
+        except UnidentifiedImageError:
+            print(f"Error on file {path}: not a valid image")
+        except OSError as e:
+            print(f"Error on file {path}: {e}")
+        except (ValueError, TypeError, OverflowError) as e:
+            print(f"Error on file {path}: invalid metadata ({e})")
+        finally:
+            print()
+
+
+if __name__ == "__main__":
+    main()
