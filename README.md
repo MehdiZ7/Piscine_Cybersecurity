@@ -1,17 +1,23 @@
-# Piscine Cybersécurité — Day 0 : Arachnida
+# Piscine Cybersécurité — Days 0 & 1
 
-Projet d'introduction au **web scraping** et aux **métadonnées**.
+Projets d'introduction au **web scraping**, aux **métadonnées** et aux
+**mots de passe à usage unique**.
 
-Ce dépôt contient les deux exercices du Day 0 :
+Ce dépôt contient trois programmes :
 
 1. **Spider** : parcourir un site, extraire les images et les télécharger,
    avec récursion optionnelle et limite de profondeur ;
 2. **Scorpion** : lire et afficher les métadonnées EXIF et les informations
-   techniques d'un ou plusieurs fichiers images.
+   techniques d'un ou plusieurs fichiers images ;
+3. **ft_otp** : stocker une clé chiffrée et générer des codes TOTP à 6 chiffres
+   conformes aux RFC 4226 et 6238.
 
 L'objectif de ce README est double : expliquer **ce que font les programmes**
 et détailler **comment ils sont construits**, fonction par fonction, pour rendre
 le travail lisible et vérifiable.
+
+Les exécutables sont volontairement **sans extension** : `spider`, `scorpion`
+et `ft_otp`.
 
 ---
 
@@ -23,9 +29,11 @@ le travail lisible et vérifiable.
 - [Prérequis](#prérequis)
 - [Spider — utilisation](#spider--utilisation)
 - [Scorpion — utilisation](#scorpion--utilisation)
+- [ft_otp — utilisation](#ft_otp--utilisation)
 - [Architecture et flux de données](#architecture-et-flux-de-données)
 - [Spider — détail du code](#spider--détail-du-code)
 - [Scorpion — détail du code](#scorpion--détail-du-code)
+- [ft_otp — détail du code](#ft_otp--détail-du-code)
 - [Choix techniques et sécurité](#choix-techniques-et-sécurité)
 - [Gestion des erreurs](#gestion-des-erreurs)
 - [Tests](#tests)
@@ -37,11 +45,12 @@ le travail lisible et vérifiable.
 
 ## Contexte et état du projet
 
-Le sujet impose deux programmes, avec une contrainte importante :
+Les sujets imposent plusieurs contraintes :
 
 - les requêtes HTTP et la manipulation de fichiers sont autorisées ;
 - **la logique doit être écrite soi-même** ;
-- `wget` et `scrapy` sont **interdits** (note 0).
+- `wget` et `scrapy` sont **interdits** (note 0) ;
+- une bibliothèque TOTP toute faite est interdite pour `ft_otp`.
 
 État actuel :
 
@@ -49,12 +58,13 @@ Le sujet impose deux programmes, avec une contrainte importante :
 | --- | --- |
 | Spider | Terminé et testé |
 | Scorpion | Terminé et testé |
-| Bonus (modification de métadonnées, interface graphique) | Non implémentés |
+| ft_otp | Terminé et testé |
+| Bonus (métadonnées modifiables, QR code, interface graphique) | Non implémentés |
 
 Spider utilise uniquement la **bibliothèque standard** de Python.
-Scorpion utilise **Pillow** pour ouvrir les images et lire les données EXIF,
-mais toute la logique de sélection, de conversion et d'affichage est écrite
-dans le projet.
+Scorpion utilise **Pillow** pour ouvrir les images et lire les données EXIF.
+`ft_otp` utilise la **bibliothèque standard** pour HMAC/TOTP et
+**cryptography/Fernet** pour le chiffrement de la clé.
 
 ---
 
@@ -97,46 +107,70 @@ dans le projet.
   corrompus, les fichiers absents et les métadonnées malformées.
 - Extensions : `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`.
 
+### ft_otp
+
+- Mode `-g` : lit une clé hexadécimale, la valide, la chiffre avec Fernet et
+  l'écrit dans `ft_otp.key`.
+- Mode `-k` : déchiffre `ft_otp.key`, calcule le TOTP courant et affiche
+  exactement 6 chiffres.
+- Génère et conserve une clé maître dans `ft_otp.master` (permissions `600`).
+- Implémente HOTP (RFC 4226) et TOTP (RFC 6238) sans bibliothèque TOTP.
+- HMAC-SHA1, pas de temps de 30 secondes, 6 chiffres, T0 = 0.
+- Refuse les clés trop courtes, impaires ou non hexadécimales.
+- Refuse les tokens modifiés, les mauvaises clés maîtres et les fichiers
+  absents sans afficher de traceback.
+- Compatible avec `oathtool --totp` pour une clé hexadécimale.
+
 ---
 
 ## Structure du dépôt
 
 ```text
 Piscine_Cybersecurity/
-└── days_0/
-    ├── spider/
-    │   └── spider.py
-    └── scorpion/
-        ├── scorpion.py
-        ├── sample.png
-        ├── sample_exif.jpg
-        ├── sample_rich.jpg
-        ├── sample_gps.jpg
-        ├── sample_gps_partial.jpg
-        ├── sample.gif
-        └── sample.bmp
+├── requirements.txt
+├── days_0/
+│   ├── spider/
+│   │   └── spider
+│   └── scorpion/
+│       ├── scorpion
+│       ├── sample.png
+│       ├── sample_exif.jpg
+│       ├── sample_rich.jpg
+│       ├── sample_gps.jpg
+│       ├── sample_gps_partial.jpg
+│       ├── sample.gif
+│       └── sample.bmp
+└── days_1/
+    └── ft_otp
 ```
 
-Le sujet PDF (`days_0/en.subject.pdf`) n'est volontairement pas versionné.
+Les sujets PDF (`days_0/en.subject.pdf`, `days_1/en.subject.pdf`) ne sont
+volontairement pas versionnés.
 
 Les fichiers `sample*` sont des images de test générées pour vérifier Scorpion :
 PNG sans EXIF, JPEG avec EXIF simples, JPEG avec EXIF riches, JPEG avec GPS
 complet, JPEG avec GPS partiel, GIF et BMP.
+
+Les fichiers `ft_otp.key`, `ft_otp.master` et `key.txt` sont générés localement
+et ne sont pas versionnés.
 
 ---
 
 ## Prérequis
 
 - **Python 3.10 ou supérieur** (types `str | None`, `list[str]`, etc.).
-- **Pillow** pour Scorpion :
+- **Pillow** pour Scorpion.
+- **cryptography** pour `ft_otp`.
+
+Installation des dépendances :
 
 ```bash
-python3 -m pip install pillow
+python3 -m pip install -r requirements.txt
 ```
 
 Spider n'a besoin d'aucune dépendance externe.
 
-Testé avec Python 3.14 et Pillow 12.3.0 sous Linux.
+Testé avec Python 3.14, Pillow 12.3.0 et cryptography 50.0.0 sous Linux.
 
 ---
 
@@ -145,15 +179,15 @@ Testé avec Python 3.14 et Pillow 12.3.0 sous Linux.
 Depuis `days_0/spider/` :
 
 ```bash
-python3 spider.py URL
-python3 spider.py -r -l 3 URL
-python3 spider.py -p ./mes_images URL
+./spider URL
+./spider -r -l 3 URL
+./spider -p ./mes_images URL
 ```
 
 ### Options
 
 ```text
-python3 spider.py [-r] [-l N] [-p PATH] URL
+./spider [-r] [-l N] [-p PATH] URL
 ```
 
 | Option | Description | Défaut |
@@ -190,15 +224,15 @@ Notes :
 Depuis `days_0/scorpion/` :
 
 ```bash
-python3 scorpion.py FILE1 [FILE2 ...]
+./scorpion FILE1 [FILE2 ...]
 ```
 
 Exemples :
 
 ```bash
-python3 scorpion.py sample.png
-python3 scorpion.py sample_rich.jpg sample_gps.jpg
-python3 scorpion.py sample.png sample_rich.jpg sample_gps_partial.jpg
+./scorpion sample.png
+./scorpion sample_rich.jpg sample_gps.jpg
+./scorpion sample.png sample_rich.jpg sample_gps_partial.jpg
 ```
 
 ### Exemple de sortie
@@ -220,6 +254,46 @@ Longitude : 2.294444 (2°17'40.0" E)
 Altitude  : 35 m
 Timestamp : 2024-01-02 14:30:00 UTC
 ```
+
+---
+
+## ft_otp — utilisation
+
+Depuis `days_1/` :
+
+```bash
+./ft_otp -g KEY_FILE
+./ft_otp -k ft_otp.key
+```
+
+| Option | Entrée | Action |
+| --- | --- | --- |
+| `-g` | fichier contenant une clé hexadécimale | valide, chiffre et écrit `ft_otp.key` |
+| `-k` | fichier de clé chiffré | déchiffre et affiche le TOTP courant |
+
+La clé doit contenir **au moins 64 caractères hexadécimaux**, en nombre pair.
+
+Exemple :
+
+```bash
+cd days_1
+python3 -c "print('ab' * 32)" > key.txt
+./ft_otp -g key.txt
+# Key was successfully saved in ft_otp.key.
+
+./ft_otp -k ft_otp.key
+# 913391
+```
+
+Deux appels dans la même tranche de 30 secondes donnent le même code.
+Au-delà, le code change.
+
+Fichiers générés localement :
+
+- `ft_otp.key` : token Fernet contenant la clé chiffrée ;
+- `ft_otp.master` : clé maître Fernet, permissions `600`.
+
+Ils ne sont pas versionnés.
 
 ---
 
@@ -266,6 +340,23 @@ main()
                   ├─ to_decimal() / format_dms()
                   ├─ altitude
                   └─ timestamp GPS
+```
+
+### ft_otp
+
+```text
+main()
+ │
+ ├─ -g :
+ │    read_hex_key()          lit et valide la clé hexadécimale
+ │    load_or_create_master_key()  charge/crée ft_otp.master
+ │    save_key()              chiffre avec Fernet et écrit ft_otp.key
+ │
+ └─ -k :
+      load_master_key()       lit ft_otp.master
+      load_key()              déchiffre ft_otp.key
+      totp()                  calcule le compteur temporel
+        └─ hotp()             HMAC-SHA1 + troncature dynamique
 ```
 
 ---
@@ -589,6 +680,103 @@ Le `finally` garantit une ligne vide entre les fichiers, même en cas d'erreur.
 
 ---
 
+## ft_otp — détail du code
+
+### `parse_args()`
+
+`argparse` impose un choix **exclusif** entre `-g` et `-k` :
+
+```python
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument("-g", dest="generate", metavar="KEY_FILE")
+group.add_argument("-k", dest="key_file", metavar="KEY_FILE")
+```
+
+- `-g` reçoit le chemin d'un fichier de clé hexadécimale ;
+- `-k` reçoit le chemin du fichier de clé chiffré ;
+- les deux ne peuvent pas être utilisés ensemble ;
+- sans option, argparse sort avec le code `2`.
+
+### `is_valid_hex(key)`
+
+Vérifie :
+
+- longueur minimale de 64 caractères ;
+- longueur paire ;
+- caractères uniquement hexadécimaux (`string.hexdigits`).
+
+### `read_hex_key(path)`
+
+- lit le fichier en UTF-8 ;
+- `strip()` les espaces et le saut de ligne ;
+- valide avec `is_valid_hex` ;
+- lève `ValueError` si la clé est invalide ;
+- renvoie `bytes.fromhex(key_hex)`.
+
+### `hotp(key, counter, digits=6)`
+
+Implémente le RFC 4226 :
+
+1. `counter` encodé sur 8 octets big-endian avec `struct.pack(">Q", counter)` ;
+2. `HMAC-SHA1(key, message)` ;
+3. offset = dernier octet `& 0x0F` ;
+4. extraction de 4 octets, masque `0x7F` sur le premier ;
+5. `code = binary % (10 ** digits)` ;
+6. formatage avec zéros initiaux.
+
+### `totp(key, timestamp=None, step=30, t0=0, digits=6)`
+
+Implémente le RFC 6238 :
+
+```text
+counter = floor((timestamp - t0) / step)
+```
+
+- si `timestamp` est `None`, utilise `time.time()` ;
+- `step` vaut 30 secondes ;
+- `t0` vaut 0 ;
+- appelle `hotp(key, counter, digits)`.
+
+Vecteurs RFC vérifiés : `94287082` (8 chiffres) et `287082` (6 chiffres) pour
+`timestamp=59`.
+
+### `save_key(key, path="ft_otp.key")`
+
+- charge ou crée la clé maître ;
+- chiffre `key` avec `Fernet(master).encrypt(key)` ;
+- écrit **uniquement** le token dans `ft_otp.key` ;
+- applique `chmod(0o600)`.
+
+Aucune écriture en clair n'est effectuée.
+
+### `load_key(path)`
+
+- lit la clé maître avec `load_master_key()` ;
+- lit le token dans `path` ;
+- déchiffre avec `Fernet(master).decrypt(token)` ;
+- convertit `InvalidToken` en `ValueError` pour un message propre.
+
+### `load_master_key(path=MASTER_KEY_FILE)`
+
+Lit `ft_otp.master` sans le créer. Si le fichier est absent, `FileNotFoundError`
+remonte jusqu'à `main`.
+
+### `load_or_create_master_key(path=MASTER_KEY_FILE)`
+
+- si `ft_otp.master` existe, le lit ;
+- sinon, génère une clé Fernet, l'écrit, applique `chmod(0o600)` et la renvoie.
+
+Cette fonction est utilisée uniquement par `save_key`, donc par `-g`.
+
+### `main()`
+
+- `-g` : lit la clé, la chiffre, affiche le message de succès ;
+- `-k` : déchiffre la clé, calcule le TOTP, affiche **uniquement** le code ;
+- `OSError` et `ValueError` sont affichés sur `stderr` ;
+- code de sortie `1` en cas d'échec.
+
+---
+
 ## Choix techniques et sécurité
 
 ### Bibliothèque standard pour Spider
@@ -600,6 +788,24 @@ Aucune dépendance externe, `wget` et `scrapy` sont volontairement absents.
 
 Pillow ouvre les formats de façon fiable et expose les EXIF et le sous-IFD GPS.
 La logique de sélection, de conversion et d'affichage reste dans le projet.
+
+### Fernet pour ft_otp
+
+- `ft_otp.key` contient un **token Fernet**, pas la clé en clair ;
+- Fernet assure confidentialité et intégrité (AES + HMAC) ;
+- un token modifié est rejeté avec `InvalidToken` ;
+- les permissions de `ft_otp.key` et `ft_otp.master` sont `600` ;
+- la clé maître est générée une seule fois et réutilisée.
+
+Limite : `ft_otp.master` est stocké sur le disque. Si l'attaquant vole les deux
+fichiers, il peut déchiffrer. Une version production utiliserait une passphrase,
+un keyring ou un HSM.
+
+### TOTP sans bibliothèque dédiée
+
+`ft_otp` implémente HOTP/TOTP avec `hmac`, `hashlib` et `struct`. Aucune
+bibliothèque TOTP n'est utilisée. Les paramètres sont ceux attendus par la
+plupart des outils : SHA1, 6 chiffres, 30 secondes.
 
 ### BFS plutôt que DFS
 
@@ -668,6 +874,20 @@ La déduplication se fait sur l'URL **résolue**, pas sur le `src` brut.
 | Métadonnée malformée | `invalid metadata (...)`, fichier ignoré |
 | Un fichier échoue | les suivants sont quand même traités |
 
+### ft_otp
+
+| Situation | Comportement |
+| --- | --- |
+| Clé trop courte | `Key must be at least 64 hexadecimal characters` |
+| Clé non hexadécimale | même erreur de validation |
+| Longueur impaire | même erreur de validation |
+| Fichier de clé absent | message OSError, code 1 |
+| Dossier passé en argument | `Is a directory`, code 1 |
+| Token modifié | `invalid key file or wrong master key`, code 1 |
+| Mauvaise clé maître | `invalid key file or wrong master key`, code 1 |
+| Clé maître absente | `No such file or directory: 'ft_otp.master'` |
+| `-g` et `-k` ensemble | erreur argparse, code 2 |
+
 ---
 
 ## Tests
@@ -733,7 +953,7 @@ Dans un autre terminal :
 
 ```bash
 cd days_0/spider
-python3 spider.py -r -l 1 -p /tmp/spider-out http://127.0.0.1:8000/index.html
+./spider -r -l 1 -p /tmp/spider-out http://127.0.0.1:8000/index.html
 ```
 
 Résultat attendu :
@@ -755,11 +975,11 @@ Les fichiers `sample*` permettent de vérifier les cas principaux :
 
 ```bash
 cd days_0/scorpion
-python3 scorpion.py sample.png sample_exif.jpg
-python3 scorpion.py sample_rich.jpg
-python3 scorpion.py sample_gps.jpg
-python3 scorpion.py sample_gps_partial.jpg
-python3 scorpion.py sample.gif sample.bmp
+./scorpion sample.png sample_exif.jpg
+./scorpion sample_rich.jpg
+./scorpion sample_gps.jpg
+./scorpion sample_gps_partial.jpg
+./scorpion sample.gif sample.bmp
 ```
 
 Résultats attendus :
@@ -774,21 +994,86 @@ Résultats attendus :
 ### Scorpion — erreurs
 
 ```bash
-python3 scorpion.py missing.jpg
-python3 scorpion.py /tmp
-python3 scorpion.py notes.txt
+./scorpion missing.jpg
+./scorpion /tmp
+./scorpion notes.txt
 ```
 
 Chaque cas doit afficher un message lisible, sans traceback, et le programme
 continue avec les fichiers suivants.
 
+### ft_otp — vecteurs RFC
+
+```bash
+cd days_1
+python3 - <<'PY'
+import runpy
+m = runpy.run_path("ft_otp")
+secret = b"12345678901234567890"
+for counter in range(10):
+    print(counter, m["hotp"](secret, counter))
+for ts in (59, 1111111109, 1234567890, 2000000000):
+    print(ts, m["totp"](secret, timestamp=ts, digits=8))
+PY
+```
+
+Résultats attendus :
+
+```text
+0 755224
+1 287082
+2 359152
+3 969429
+4 338314
+5 254676
+6 287922
+7 162583
+8 399871
+9 520489
+59 94287082
+1111111109 07081804
+1234567890 89005924
+2000000000 69279037
+```
+
+### ft_otp — parcours CLI
+
+```bash
+cd days_1
+python3 -c "print('ab' * 32)" > key.txt
+./ft_otp -g key.txt
+./ft_otp -k ft_otp.key
+./ft_otp -k ft_otp.key
+```
+
+Attendu :
+
+- message de succès pour `-g` ;
+- même code à 6 chiffres pour les deux `-k` dans la même tranche de 30 s ;
+- permissions `600` sur `ft_otp.key` et `ft_otp.master`.
+
+### ft_otp — comparaison avec Oathtool
+
+```bash
+code_ft=$(./ft_otp -k ft_otp.key)
+code_ref=$(oathtool --totp "$(cat key.txt)")
+printf 'ft_otp=%s oathtool=%s\n' "$code_ft" "$code_ref"
+```
+
+Les deux codes doivent être identiques.
+
+Avec Oathtool 2.6.14, l'entrée hexadécimale est le comportement par défaut.
+`-b` sert à passer en base32.
+
 ### Vérifications statiques
 
 ```bash
-python3 -m py_compile days_0/spider/spider.py
-python3 -m py_compile days_0/scorpion/scorpion.py
-python3 -m flake8 days_0/spider/spider.py
-python3 -m flake8 days_0/scorpion/scorpion.py
+python3 -m py_compile days_0/spider/spider
+python3 -m py_compile days_0/scorpion/scorpion
+python3 -m py_compile days_1/ft_otp
+python3 -m flake8 days_0/spider/spider
+python3 -m flake8 days_0/scorpion/scorpion
+python3 -m flake8 days_1/ft_otp
 ```
 
 ---
@@ -816,15 +1101,31 @@ python3 -m flake8 days_0/scorpion/scorpion.py
 - Les dates sont affichées en heure locale pour le système de fichiers, en UTC
   pour le GPS.
 
+### ft_otp
+
+- La clé maître est stockée dans `ft_otp.master` : si l'attaquant vole ce fichier
+  **et** `ft_otp.key`, il peut déchiffrer. Une passphrase, un keyring ou un HSM
+  serait nécessaire pour une vraie protection.
+- Aucun QR code ni interface graphique (bonus).
+- Pas de fenêtre de tolérance pour la vérification : `ft_otp` génère seulement
+  le code courant.
+- Les messages d'erreur de validation hexadécimale restent génériques.
+- Pas de comparaison en temps constant, car le programme ne vérifie pas de code ;
+  il ne fait que générer.
+- Aucun rate limiting : un code à 6 chiffres peut être bruteforcé côté serveur
+  si la vérification n'est pas protégée.
+
 ---
 
 ## Bonus du sujet
 
-Le bonus n'est pas implémenté. Il pourrait inclure :
+Les bonus ne sont pas implémentés. Ils pourraient inclure :
 
 - une option Scorpion pour modifier ou supprimer les métadonnées d'un fichier
   (par exemple avec `piexif`) ;
-- une interface graphique de visualisation et de gestion des métadonnées.
+- une interface graphique de visualisation et de gestion des métadonnées ;
+- un QR code TOTP pour `ft_otp` ;
+- une interface graphique pour `ft_otp`.
 
 Le bonus ne doit être évalué que si la partie obligatoire est parfaite.
 
@@ -846,4 +1147,10 @@ Le bonus ne doit être évalué que si la partie obligatoire est parfaite.
 - Interface CLI avec `argparse`.
 - Gestion d'erreurs isolée par page, par image et par fichier.
 - Traitement de métadonnées non fiables.
-- Tests manuels avec un serveur HTTP local et des images générées.
+- Implémentation de HOTP/TOTP avec `hmac`, `hashlib` et `struct`.
+- Compréhension des RFC 4226 et 6238.
+- Gestion du temps Unix et des pas de 30 secondes.
+- Chiffrement authentifié avec Fernet.
+- Gestion d'une clé maître et permissions de fichiers.
+- Validation de clés hexadécimales et gestion d'erreurs CLI.
+- Tests manuels avec un serveur HTTP local, des images générées et Oathtool.

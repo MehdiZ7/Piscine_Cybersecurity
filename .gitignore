@@ -1,5 +1,5 @@
-# Sujet de la piscine (non redistribué)
-days_0/en.subject.pdf
+# Sujets de la piscine (non redistribués)
+days_*/en.subject.pdf
 
 # Python
 __pycache__/
@@ -14,3 +14,9 @@ data/
 
 # Fichiers de test invalides
 days_0/scorpion/not_an_image.png
+
+# Secrets et clés de test
+days_1/ft_otp.key
+days_1/ft_otp.master
+days_1/key.txt
+days_1/*.hex

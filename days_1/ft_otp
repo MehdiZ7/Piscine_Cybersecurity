@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""ft_otp - generate and use time-based one-time passwords."""
+
+import argparse
+import hashlib
+import hmac
+import string
+import struct
+import sys
+import time
+from pathlib import Path
+
+from cryptography.fernet import Fernet, InvalidToken
+
+
+MASTER_KEY_FILE = "ft_otp.master"
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse the command-line arguments.
+
+    Exactly one of -g or -k is required. -g takes a file containing a
+    hexadecimal key; -k takes the encrypted key file.
+    """
+    parser = argparse.ArgumentParser(
+        prog="ft_otp",
+        description="Generate and use time-based one-time passwords.",
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "-g",
+        dest="generate",
+        metavar="KEY_FILE",
+        help="store a hexadecimal key in ft_otp.key",
+    )
+    group.add_argument(
+        "-k",
+        dest="key_file",
+        metavar="KEY_FILE",
+        help="generate a TOTP from the encrypted key file",
+    )
+    return parser.parse_args()
+
+
+def is_valid_hex(key: str) -> bool:
+    """Return True when key is a valid hexadecimal key.
+
+    A valid key contains at least 64 characters, has an even length,
+    and uses only hexadecimal digits.
+    """
+    if len(key) < 64:
+        return False
+    if len(key) % 2 != 0:
+        return False
+    return all(char in string.hexdigits for char in key)
+
+
+def read_hex_key(path: str) -> bytes:
+    """Read and validate a hexadecimal key file.
+
+    Strip surrounding whitespace, ensure the content is a valid
+    hexadecimal key, and return the corresponding bytes.
+    """
+    raw = Path(path).read_text(encoding="utf-8")
+    key_hex = raw.strip()
+    if not is_valid_hex(key_hex):
+        raise ValueError("Key must be at least 64 hexadecimal characters")
+    return bytes.fromhex(key_hex)
+
+
+def hotp(key: bytes, counter: int, digits: int = 6) -> str:
+    """Return an HOTP code for the given key and counter."""
+    message = struct.pack(">Q", counter)
+    digest = hmac.new(key, message, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary = (
+        ((digest[offset] & 0x7F) << 24)
+        | (digest[offset + 1] << 16)
+        | (digest[offset + 2] << 8)
+        | (digest[offset + 3])
+    )
+    code = binary % (10 ** digits)
+    return f"{code:0{digits}d}"
+
+
+def totp(
+    key: bytes,
+    timestamp: float | None = None,
+    step: int = 30,
+    t0: int = 0,
+    digits: int = 6,
+) -> str:
+    """Return a TOTP code for the given key and timestamp.
+
+    If timestamp is None, use the current Unix time. The counter is
+    derived from the number of time steps elapsed since t0.
+    """
+    if timestamp is None:
+        timestamp = time.time()
+    counter = int((timestamp - t0) // step)
+    return hotp(key, counter, digits)
+
+
+def save_key(key: bytes, path: str = "ft_otp.key") -> None:
+    """Encrypt and save the key bytes to path."""
+    master = load_or_create_master_key()
+    f = Fernet(master)
+    token = f.encrypt(key)
+    Path(path).write_bytes(token)
+    Path(path).chmod(0o600)
+
+
+def load_key(path: str) -> bytes:
+    """Decrypt and return the key bytes stored at path."""
+    master = load_master_key()
+    token = Path(path).read_bytes()
+    try:
+        key = Fernet(master).decrypt(token)
+    except InvalidToken as e:
+        raise ValueError("invalid key file or wrong master key") from e
+    return key
+
+
+def load_master_key(path: str = MASTER_KEY_FILE) -> bytes:
+    """Load the master encryption key from path."""
+    return Path(path).read_bytes()
+
+
+def load_or_create_master_key(path: str = MASTER_KEY_FILE) -> bytes:
+    """Load the master key, creating it if it does not exist."""
+    if Path(path).exists():
+        return Path(path).read_bytes()
+    key = Fernet.generate_key()
+    Path(path).write_bytes(key)
+    Path(path).chmod(0o600)
+    return key
+
+
+def main() -> None:
+    """Run ft_otp from the command line."""
+    args = parse_args()
+    if args.generate:
+        try:
+            key = read_hex_key(args.generate)
+            save_key(key)
+            print("Key was successfully saved in ft_otp.key.")
+        except (OSError, ValueError) as e:
+            print(f"ft_otp: error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        try:
+            key = load_key(args.key_file)
+            print(totp(key))
+        except (OSError, ValueError) as e:
+            print(f"ft_otp: error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
