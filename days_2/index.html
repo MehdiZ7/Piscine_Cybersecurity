@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ft_onion</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050706;
+      --panel: #0b100d;
+      --bar: #0e1511;
+      --border: #1d2a22;
+      --text: #b8f5c8;
+      --muted: #6f9f7f;
+      --accent: #52ff9a;
+      --shadow: rgba(0, 0, 0, 0.6);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle at top, #0c1711 0, var(--bg) 55%);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas,
+        "Liberation Mono", monospace;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .terminal {
+      width: min(760px, 100%);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px var(--shadow);
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bar);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #3f5c4a;
+    }
+
+    .dot:nth-child(2) {
+      background: #4d7a5e;
+    }
+
+    .dot:nth-child(3) {
+      background: #68a878;
+    }
+
+    .title {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .body {
+      padding: 28px 28px 34px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      color: var(--accent);
+      font-size: clamp(1.2rem, 2.4vw, 1.7rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .line {
+      margin: 0.3rem 0;
+    }
+
+    .prompt {
+      color: var(--accent);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 0.6em;
+      height: 1.15em;
+      margin-left: 0.15em;
+      vertical-align: -0.18em;
+      background: var(--accent);
+      animation: blink 1.1s steps(1) infinite;
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0;
+      }
+    }
+
+    footer {
+      margin-top: 22px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cursor {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="terminal" aria-label="ft_onion terminal">
+    <div class="bar" aria-hidden="true">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="title">ft_onion</span>
+    </div>
+
+    <section class="body">
+      <h1>Welcome to ft_onion</h1>
+      <p class="subtitle">A minimal hidden service.</p>
+
+      <p class="line"><span class="prompt">$</span> status</p>
+      <p class="line muted">&nbsp;&nbsp;service: online</p>
+      <p class="line muted">&nbsp;&nbsp;access: tor network</p>
+      <p class="line muted">&nbsp;&nbsp;tracking: none</p>
+
+      <p class="line">
+        <span class="prompt">$</span>
+        <span class="cursor" aria-hidden="true"></span>
+      </p>
+
+      <footer>No trackers. Just a page.</footer>
+    </section>
+  </main>
+</body>
+</html>
