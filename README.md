@@ -1,16 +1,18 @@
-# Piscine Cybersécurité — Days 0 & 1
+# Piscine Cybersécurité — Days 0, 1 & 2
 
-Projets d'introduction au **web scraping**, aux **métadonnées** et aux
-**mots de passe à usage unique**.
+Projets d'introduction au **web scraping**, aux **métadonnées**, aux
+**mots de passe à usage unique** et aux **services cachés Tor**.
 
-Ce dépôt contient trois programmes :
+Ce dépôt contient quatre programmes :
 
 1. **Spider** : parcourir un site, extraire les images et les télécharger,
    avec récursion optionnelle et limite de profondeur ;
 2. **Scorpion** : lire et afficher les métadonnées EXIF et les informations
    techniques d'un ou plusieurs fichiers images ;
 3. **ft_otp** : stocker une clé chiffrée et générer des codes TOTP à 6 chiffres
-   conformes aux RFC 4226 et 6238.
+   conformes aux RFC 4226 et 6238 ;
+4. **ft_onion** : publier une page statique via Nginx sur un service caché Tor,
+   avec SSH sur le port 4242.
 
 L'objectif de ce README est double : expliquer **ce que font les programmes**
 et détailler **comment ils sont construits**, fonction par fonction, pour rendre
@@ -34,6 +36,7 @@ et `ft_otp`.
 - [Spider — détail du code](#spider--détail-du-code)
 - [Scorpion — détail du code](#scorpion--détail-du-code)
 - [ft_otp — détail du code](#ft_otp--détail-du-code)
+- [ft_onion — service caché Tor](#ft_onion--service-caché-tor)
 - [Choix techniques et sécurité](#choix-techniques-et-sécurité)
 - [Gestion des erreurs](#gestion-des-erreurs)
 - [Tests](#tests)
@@ -59,12 +62,14 @@ Les sujets imposent plusieurs contraintes :
 | Spider | Terminé et testé |
 | Scorpion | Terminé et testé |
 | ft_otp | Terminé et testé |
-| Bonus (métadonnées modifiables, QR code, interface graphique) | Non implémentés |
+| ft_onion | Terminé et testé |
+| Bonus (métadonnées modifiables, QR code, interface graphique, SSH fortifié) | Non implémentés |
 
 Spider utilise uniquement la **bibliothèque standard** de Python.
 Scorpion utilise **Pillow** pour ouvrir les images et lire les données EXIF.
 `ft_otp` utilise la **bibliothèque standard** pour HMAC/TOTP et
 **cryptography/Fernet** pour le chiffrement de la clé.
+`ft_onion` utilise **Nginx**, **Tor** et **OpenSSH** dans une VM Debian.
 
 ---
 
@@ -121,6 +126,18 @@ Scorpion utilise **Pillow** pour ouvrir les images et lire les données EXIF.
   absents sans afficher de traceback.
 - Compatible avec `oathtool --totp` pour une clé hexadécimale.
 
+### ft_onion
+
+- Page statique `index.html` accessible uniquement via Tor.
+- Nginx comme seul serveur web, écoute sur `127.0.0.1:80`.
+- Service caché Tor exposant HTTP sur le port 80.
+- SSH sur le port 4242, écoute sur `127.0.0.1:4242`.
+- Aucun port publié sur l'hôte et aucune règle de firewall.
+- Page sans ressource externe (CSS inline, favicon data URI).
+- Logs Nginx désactivés, version masquée, en-têtes de sécurité.
+- Script `setup.sh` idempotent pour installer et configurer la VM Debian.
+- Authentification SSH par mot de passe conservée : bonus SSH non fait.
+
 ---
 
 ## Structure du dépôt
@@ -140,12 +157,22 @@ Piscine_Cybersecurity/
 │       ├── sample_gps_partial.jpg
 │       ├── sample.gif
 │       └── sample.bmp
-└── days_1/
-    └── ft_otp
+├── days_1/
+│   └── ft_otp
+└── days_2/
+    ├── index.html
+    ├── nginx.conf
+    ├── sshd_config
+    ├── torrc
+    ├── setup.sh
+    └── README.md
 ```
 
-Les sujets PDF (`days_0/en.subject.pdf`, `days_1/en.subject.pdf`) ne sont
-volontairement pas versionnés.
+Les sujets PDF (`days_0/en.subject.pdf`, `days_1/en.subject.pdf`,
+`days_2/en.subject.pdf`) ne sont volontairement pas versionnés.
+
+Le détail de ft_onion est documenté dans
+[days_2/README.md](days_2/README.md).
 
 Les fichiers `sample*` sont des images de test générées pour vérifier Scorpion :
 PNG sans EXIF, JPEG avec EXIF simples, JPEG avec EXIF riches, JPEG avec GPS
@@ -161,6 +188,8 @@ et ne sont pas versionnés.
 - **Python 3.10 ou supérieur** (types `str | None`, `list[str]`, etc.).
 - **Pillow** pour Scorpion.
 - **cryptography** pour `ft_otp`.
+- Pour `ft_onion` : une **VM Debian 12/13** avec `sudo`, Nginx, Tor et
+  OpenSSH. Les paquets sont installés par le script, dans la VM.
 
 Installation des dépendances :
 
@@ -777,6 +806,82 @@ Cette fonction est utilisée uniquement par `save_key`, donc par `-g`.
 
 ---
 
+## ft_onion — service caché Tor
+
+Le projet publie une page statique sous forme de service caché Tor.
+
+```text
+Utilisateur Tor
+      │
+      ▼
+Réseau Tor
+      │
+      ▼
+Service caché Tor (VM)
+      ├── port 80   → Nginx 127.0.0.1:80
+      └── port 4242 → sshd  127.0.0.1:4242
+```
+
+Aucun port n'est publié sur l'hôte. Nginx et SSH écoutent uniquement en local.
+
+### Fichiers
+
+| Fichier | Rôle |
+| --- | --- |
+| `index.html` | page statique, CSS inline, aucune ressource externe |
+| `nginx.conf` | site Nginx statique |
+| `sshd_config` | SSH sur 4242, écoute locale |
+| `torrc` | service caché Tor |
+| `setup.sh` | installation et configuration automatique |
+| `README.md` | documentation détaillée du projet |
+
+### Utilisation
+
+Dans une VM Debian :
+
+```bash
+cd days_2
+chmod +x setup.sh
+sudo ./setup.sh
+```
+
+Le script installe Nginx, Tor et OpenSSH, copie la page, configure les services,
+active le service caché et affiche l'adresse `.onion`.
+
+Récupérer l'adresse :
+
+```bash
+sudo cat /var/lib/tor/ft_onion/hostname
+```
+
+### Tests
+
+```bash
+sudo ss -tlnp | grep -E ':80|:4242|:9050'
+curl -I http://127.0.0.1/
+
+ONION="$(sudo cat /var/lib/tor/ft_onion/hostname)"
+curl -I --socks5-hostname 127.0.0.1:9050 "http://$ONION/"
+torsocks ssh -p 4242 mzouhir@$ONION
+```
+
+- Nginx et SSH doivent écouter sur `127.0.0.1` ;
+- Tor SOCKS sur `127.0.0.1:9050` ;
+- l'onion doit répondre `200 OK` ;
+- SSH via Tor demande le mot de passe.
+
+### Sécurité
+
+- `access_log off` et `server_tokens off` dans Nginx ;
+- CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` ;
+- aucun CDN, police externe, analytics ou iframe ;
+- clés Tor et clés SSH privées hors du dépôt ;
+- redirections NAT d'administration supprimées avant évaluation.
+
+Le détail complet est dans [days_2/README.md](days_2/README.md).
+
+---
+
 ## Choix techniques et sécurité
 
 ### Bibliothèque standard pour Spider
@@ -1125,7 +1230,9 @@ Les bonus ne sont pas implémentés. Ils pourraient inclure :
   (par exemple avec `piexif`) ;
 - une interface graphique de visualisation et de gestion des métadonnées ;
 - un QR code TOTP pour `ft_otp` ;
-- une interface graphique pour `ft_otp`.
+- une interface graphique pour `ft_otp` ;
+- un durcissement SSH complet pour `ft_onion` (clés uniquement, restrictions) ;
+- une application interactive pour `ft_onion`.
 
 Le bonus ne doit être évalué que si la partie obligatoire est parfaite.
 
@@ -1153,4 +1260,9 @@ Le bonus ne doit être évalué que si la partie obligatoire est parfaite.
 - Chiffrement authentifié avec Fernet.
 - Gestion d'une clé maître et permissions de fichiers.
 - Validation de clés hexadécimales et gestion d'erreurs CLI.
-- Tests manuels avec un serveur HTTP local, des images générées et Oathtool.
+- Configuration Nginx pour un site statique.
+- Configuration d'un service caché Tor v3.
+- Mapping de ports Tor vers des services locaux.
+- Configuration SSH sur un port non standard.
+- Contraintes d'anonymat et absence de ports publiés.
+- Tests manuels avec un serveur HTTP local, des images générées et Tor.

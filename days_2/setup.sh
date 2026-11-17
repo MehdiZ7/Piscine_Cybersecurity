@@ -15,10 +15,11 @@ cd "$SCRIPT_DIR"
 #Check if all the files exists
 [ -f index.html ] || { echo "index.html is missing"; exit 1; }
 [ -f nginx.conf ] || { echo "nginx.conf is missing"; exit 1; }
+[ -f sshd_config ] || { echo "sshd_config is missing"; exit 1; }
 
 #install nginx
 apt-get update
-apt-get install -y nginx curl tor
+apt-get install -y nginx curl tor openssh-server
 
 #creation of the tree of ft_onion
 mkdir -p /var/www/ft_onion
@@ -46,10 +47,20 @@ if ! grep -qF "$TORRC_MARKER" /etc/tor/torrc; then
 	printf '\n' >> /etc/tor/torrc
 	cat torrc >> /etc/tor/torrc
 fi
+# check if the TORRC file is complete
+while IFS= read -r line; do
+	[ -z "$line" ] && continue
+	case "$line" in
+		\#*) continue ;;
+	esac
+	grep -qF "$line" /etc/tor/torrc || printf '%s\n' "$line" >> /etc/tor/torrc
+done < torrc
 
 #test and reboot tor
-systemctl enable tor
-systemctl restart tor
+mkdir -p /etc/systemd/system/multi-user.target.wants
+ln -sf /usr/lib/systemd/system/tor@.service /etc/systemd/system/multi-user.target.wants/tor@default.service
+systemctl daemon-reload
+systemctl restart tor@default
 HIDDEN_DIR="$(awk '$1 == "HiddenServiceDir" {print $2; exit}' torrc)"
 HIDDEN_DIR="${HIDDEN_DIR%/}"
 HOSTNAME_FILE="$HIDDEN_DIR/hostname"
@@ -61,9 +72,24 @@ for _ in $(seq 1 30); do
 done
 [ -s "$HOSTNAME_FILE" ] || {
 	echo "Tor did not create hostname" >&2
-	journalctl -u tor -n 30 --no-pager
+	journalctl -u tor@default -n 30 --no-pager
 	exit 1
 }
+
+#configuration of the sshd file + testing
+if [ ! -f /etc/ssh/sshd_config ]; then
+    cp sshd_config /etc/ssh/sshd_config
+    chmod 644 /etc/ssh/sshd_config
+elif ! cmp -s sshd_config /etc/ssh/sshd_config; then
+    cp -a /etc/ssh/sshd_config "/etc/ssh/sshd_config.bak.$(date +%s)"
+    cp sshd_config /etc/ssh/sshd_config
+    chmod 644 /etc/ssh/sshd_config
+fi
+
+sshd -t
+systemctl enable ssh
+systemctl restart ssh
+echo "SSH configured on port 4242"
 
 #last check
 if curl -fsS http://127.0.0.1/ | grep -q "Welcome to ft_onion" ; then
@@ -73,5 +99,6 @@ else
 	exit 1
 fi
 ONION="$(cat "$HOSTNAME_FILE")"
+
 echo "Onion address: $ONION"
 
